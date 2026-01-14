@@ -2,11 +2,12 @@ from fastapi import FastAPI, HTTPException, Request
 from pathlib import Path
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
+from pathlib import Path
 
 app = FastAPI()
 
 # Base directory where text files live. This keeps file reads constrained to this folder.
-BASE_DIR = Path(__file__).resolve().parent.parent / "files"
+BASE_DIR = Path("/tmp") / "files"
 
 
 def _safe_resolve(base: Path, filename: str) -> Path:
