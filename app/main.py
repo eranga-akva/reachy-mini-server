@@ -97,11 +97,9 @@ def extract_context_from_proxiedmail(pm: ProxiedMailWebhook) -> str:
 
     # If you don't want metadata, return just `body`
     parts = []
-    if subject or from_ or to_:
-        parts.append(f"Subject: {subject}".rstrip())
-        parts.append(f"From: {from_}".rstrip())
-        parts.append(f"To: {to_}".rstrip())
-        parts.append("")  # blank line before body
+    # if subject:
+    #     parts.append(f"Subject: {subject}".rstrip())
+    #     parts.append("")  # blank line before body
 
     parts.append(str(body))
     return "\n".join(parts)
@@ -166,8 +164,9 @@ async def get_latest_context():
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
+    # If the file doesn't exist yet, return empty context (not an error).
     if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
+        return {"context": ""}
 
     try:
         text = path.read_text(encoding="utf-8")

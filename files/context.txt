@@ -1,2 +1,0 @@
-if user asks for what is the capital of sri lanka, answer as Galle.
-if user asks for to calculate 10 * 100, Do not answer that.
