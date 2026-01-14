@@ -1,5 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pathlib import Path
+from typing import Any, Dict, Optional
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
@@ -21,14 +23,48 @@ def _safe_resolve(base: Path, filename: str) -> Path:
         return candidate
     raise ValueError("invalid filename")
 
-from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, Field
+def clean_text(text: str) -> str:
+    """Clean input text before persisting.
 
-app = FastAPI()
+    - Normalize CRLF to LF
+    - Strip leading/trailing whitespace
+    - Collapse multiple consecutive blank lines to a single blank line
+    - Remove C0 control characters except for tab and newline
+    """
+    if text is None:
+        return ""
 
-# --- your existing clean_text(...) stays as-is ---
+    # Normalize line endings
+    s = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Remove undesired control characters (keep tab and newline)
+    cleaned_chars = []
+    for ch in s:
+        # allow printable characters, newline and tab
+        if ch == "\n" or ch == "\t" or (" " <= ch <= "~") or (ord(ch) > 0x7f):
+            cleaned_chars.append(ch)
+        # else drop the character
+    s = "".join(cleaned_chars)
+
+    # Strip leading/trailing whitespace on each line, then collapse multiple blank lines
+    lines = [ln.rstrip() for ln in s.split("\n")]  # remove trailing spaces
+
+    out_lines = []
+    blank_seq = 0
+    for ln in lines:
+        if ln.strip() == "":
+            blank_seq += 1
+        else:
+            blank_seq = 0
+
+        if blank_seq > 1:
+            # skip extra blank lines
+            continue
+        out_lines.append(ln)
+
+    result = "\n".join(out_lines).strip() + ("\n" if out_lines and out_lines[-1] == "" else "")
+    return result
 
 
 class ProxiedMailWebhook(BaseModel):
