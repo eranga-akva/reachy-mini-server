@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pathlib import Path
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
-from pathlib import Path
+from pprint import pformat
 
 app = FastAPI()
 
@@ -116,6 +116,11 @@ async def webhook(request: Request):
         data = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # ---- DEBUG: PRINT STRUCTURE ----
+    print("=== RAW WEBHOOK PAYLOAD ===")
+    print(pformat(data, width=120))
+    print("=== END PAYLOAD ===")
 
     # 1) Legacy path
     if isinstance(data, dict) and "context" in data:
