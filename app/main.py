@@ -8,6 +8,32 @@ app = FastAPI()
 
 # Base directory where text files live. This keeps file reads constrained to this folder.
 BASE_DIR = Path("/tmp") / "files"
+ATTACH_DIR = BASE_DIR / "attachments"
+
+def extract_text_from_file(path: Path) -> str:
+    """
+    Best-effort text extraction for common types.
+    - .docx uses python-docx (you have it)
+    - .pdf uses pypdf (install if you want PDF text)
+    """
+    suffix = path.suffix.lower()
+
+    if suffix in {".txt", ".csv", ".log"}:
+        return path.read_text(encoding="utf-8", errors="replace")
+
+    if suffix == ".docx":
+        import docx
+        d = docx.Document(str(path))
+        return "\n".join(p.text for p in d.paragraphs).strip()
+
+    if suffix == ".pdf":
+        # pip install pypdf   (only if you want PDF extraction)
+        from pypdf import PdfReader
+        reader = PdfReader(str(path))
+        return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+
+    # images/other binaries: skip
+    return ""
 
 
 def _safe_resolve(base: Path, filename: str) -> Path:
@@ -76,6 +102,18 @@ class ProxiedMailWebhook(BaseModel):
 class LegacyWebhook(BaseModel):
     context: str
 
+def sanitize_filename(name: str) -> str:
+    # minimal sanitize for Vercel/tmp
+    name = (name or "file.bin").replace("/", "_").replace("\\", "_").strip()
+    return name[:200] if name else "file.bin"
+
+
+async def download_attachment(url: str) -> bytes:
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        return r.content
+
 
 def extract_context_from_proxiedmail(pm: ProxiedMailWebhook) -> str:
     """
@@ -97,9 +135,9 @@ def extract_context_from_proxiedmail(pm: ProxiedMailWebhook) -> str:
 
     # If you don't want metadata, return just `body`
     parts = []
-    # if subject:
-    #     parts.append(f"Subject: {subject}".rstrip())
-    #     parts.append("")  # blank line before body
+    if subject:
+        parts.append(f"Subject: {subject}".rstrip())
+        parts.append("")  # blank line before body
 
     parts.append(str(body))
     return "\n".join(parts)
@@ -133,6 +171,34 @@ async def webhook(request: Request):
         context = extract_context_from_proxiedmail(pm)
         cleaned = clean_text(context)
 
+        attachments = data.get("attachments", []) if isinstance(data, dict) else []
+        if not isinstance(attachments, list):
+            attachments = []
+        ATTACH_DIR.mkdir(parents=True, exist_ok=True)
+        
+        extracted_texts = []
+        for a in attachments:
+            if not isinstance(a, dict):
+                continue
+            filename = sanitize_filename(a.get("filename"))
+            url = a.get("url")
+            if not url:
+                continue
+
+            content = await download_attachment(url)
+
+            file_path = ATTACH_DIR / filename
+            file_path.write_bytes(content)
+
+            # extract text inside docx/pdf/txt
+            try:
+                t = extract_text_from_file(file_path)
+                if t.strip():
+                    extracted_texts.append(t)
+            except Exception as e:
+                print(f"Failed to extract text from {filename}: {e}")
+        
+        cleaned += "\n" + "\n".join(extracted_texts)
     else:
         raise HTTPException(
             status_code=400,
