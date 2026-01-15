@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 from pprint import pformat
+import httpx
 
 app = FastAPI()
 
